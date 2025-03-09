@@ -1,7 +1,7 @@
 use std::{fs::File, io::{self, BufReader}, panic::{self, AssertUnwindSafe}, time::Duration};
 
 use clap::Parser;
-use rodio::{Decoder, OutputStream, source::Source};
+use rodio::{Decoder, OutputStream, source::Source, Sink};
 
 fn seconds_to_minute_seconds(seconds: u64)->String{
     let minutes=((seconds/60) as f32).round();
@@ -22,6 +22,8 @@ fn main() {
         While playing, use commands to control the player. Command list:
         - q: quit
         - h: print this help
+        - i: info
+        - p: play/pause
         ";
     let args= Args::parse();
     println!("Playing {}",args.file);
@@ -31,6 +33,8 @@ fn main() {
     let file = BufReader::new(File::open(args.file)
         .unwrap()
     );
+    let sink = Sink::try_new(&stream_handle)
+        .unwrap();
     let source = Decoder::new(file).unwrap();
     let result = panic::catch_unwind(AssertUnwindSafe(|| source.total_duration().unwrap()));
     let length = match  result{
@@ -38,7 +42,7 @@ fn main() {
         Err(_) => Duration::ZERO,
     };
 
-    let _ = stream_handle.play_raw(source.convert_samples());
+    sink.append(source);
 
     loop {
         let mut command = String::new();
@@ -53,7 +57,18 @@ fn main() {
             "i" => {
                 println!("Playing {}, {} long audio file",filename,seconds_to_minute_seconds(length.as_secs()));
             },
+            "p" => {
+                if sink.is_paused() {
+                    sink.play();
+                } else {
+                    sink.pause();
+                }
+            }
              _   => continue,
+        }
+        if sink.empty()  {
+            println!("Finished playing.");
+            return;
         }
     }
 }
